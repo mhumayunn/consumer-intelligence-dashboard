@@ -1,8 +1,6 @@
 
 import os
 import math
-import json
-import tempfile
 from datetime import datetime
 from typing import Dict, Optional, Tuple
 
@@ -16,6 +14,7 @@ from google.oauth2.service_account import Credentials
 from PIL import Image
 import streamlit.components.v1 as components
 import calendar
+from pathlib import Path
 
 
 # =========================================================
@@ -23,15 +22,10 @@ import calendar
 # =========================================================
 SPREADSHEET_NAME = "PlayStore Sentiment-Automated"
 
-# Google credentials
-if "gcp_service_account" in st.secrets:
-    # Running on Streamlit Cloud
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-        json.dump(dict(st.secrets["gcp_service_account"]), f)
-        CREDS_FILE = f.name
-else:
-    # Running locally
-    CREDS_FILE = "sentiment-automation-caadd9710134.json"
+LOCAL_CREDS_FILE = (
+    Path(__file__).resolve().parent
+    / "sentiment-automation-caadd9710134.json"
+)
 
 APP_DISPLAY = {
     "tamasha": "Tamasha",
@@ -638,53 +632,97 @@ inject_css()
 # =========================================================
 # DATA ACCESS
 # =========================================================
-def get_gspread_client(creds_path: str):
+def get_gspread_client():
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+
+    # Local development: use the ignored JSON credentials file
+    if LOCAL_CREDS_FILE.exists():
+        creds = Credentials.from_service_account_file(
+            str(LOCAL_CREDS_FILE),
+            scopes=scopes,
+        )
+
+    # Streamlit Cloud: use credentials stored in Streamlit Secrets
+    else:
+        try:
+            service_account_info = dict(
+                st.secrets["gcp_service_account"]
+            )
+        except Exception as error:
+            raise RuntimeError(
+                "Google credentials were not found. "
+                "For local use, place "
+                "'sentiment-automation-caadd9710134.json' "
+                "in the same folder as Dashboard.py. "
+                "For Streamlit Cloud, add the credentials "
+                "under [gcp_service_account] in Streamlit Secrets."
+            ) from error
+
+        creds = Credentials.from_service_account_info(
+            service_account_info,
+            scopes=scopes,
+        )
+
     return gspread.authorize(creds)
 
 
 @st.cache_resource(show_spinner=False)
-def get_sheet(spreadsheet_name: str, creds_path: str):
-    client = get_gspread_client(creds_path)
+def get_sheet(spreadsheet_name: str):
+    client = get_gspread_client()
     return client.open(spreadsheet_name)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def read_worksheet(spreadsheet_name: str, creds_path: str, worksheet_name: str) -> pd.DataFrame:
-    sh = get_sheet(spreadsheet_name, creds_path)
+def read_worksheet(
+    spreadsheet_name: str,
+    worksheet_name: str,
+) -> pd.DataFrame:
+    sh = get_sheet(spreadsheet_name)
     ws = sh.worksheet(worksheet_name)
     records = ws.get_all_records()
     return pd.DataFrame(records)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def list_worksheets(spreadsheet_name: str, creds_path: str):
-    sh = get_sheet(spreadsheet_name, creds_path)
+def list_worksheets(spreadsheet_name: str):
+    sh = get_sheet(spreadsheet_name)
     return [ws.title for ws in sh.worksheets()]
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def get_latest_month(spreadsheet_name: str, creds_path: str) -> str:
-    meta = read_worksheet(spreadsheet_name, creds_path, "meta")
+def get_latest_month(spreadsheet_name: str) -> str:
+    meta = read_worksheet(spreadsheet_name, "meta")
+
     if meta.empty:
         raise ValueError("Meta sheet is empty.")
-    latest = meta.loc[meta["key"] == "latest_month", "value"]
+
+    latest = meta.loc[
+        meta["key"] == "latest_month",
+        "value",
+    ]
+
     if latest.empty:
-        raise ValueError("latest_month not found in meta sheet.")
+        raise ValueError(
+            "latest_month not found in meta sheet."
+        )
+
     return str(latest.iloc[0])
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def available_month_keys(spreadsheet_name: str, creds_path: str):
-    titles = list_worksheets(spreadsheet_name, creds_path)
+def available_month_keys(spreadsheet_name: str):
+    titles = list_worksheets(spreadsheet_name)
     months = set()
-    for t in titles:
-        if t.startswith("summary_"):
-            months.add(t.replace("summary_", ""))
+
+    for title in titles:
+        if title.startswith("summary_"):
+            months.add(
+                title.replace("summary_", "")
+            )
+
     return sorted(months, reverse=True)
 
 
@@ -722,12 +760,12 @@ def previous_month_key(month_key: str, all_months: list[str]) -> Optional[str]:
 
 def load_month_bundle(month_key: str) -> Dict[str, pd.DataFrame]:
     bundle = {
-        "summary": read_worksheet(SPREADSHEET_NAME, CREDS_FILE, f"summary_{month_key}"),
-        "weekly": read_worksheet(SPREADSHEET_NAME, CREDS_FILE, f"weekly_{month_key}"),
-        "daily": read_worksheet(SPREADSHEET_NAME, CREDS_FILE, f"daily_ratings_{month_key}"),
-        "tamasha_aspects": read_worksheet(SPREADSHEET_NAME, CREDS_FILE, f"tamasha_aspects_{month_key}"),
-        "tamasha_tagged": read_worksheet(SPREADSHEET_NAME, CREDS_FILE, f"tamasha_tagged_reviews_{month_key}"),
-        "tamasha_insights": read_worksheet(SPREADSHEET_NAME, CREDS_FILE, f"tamasha_insights_{month_key}"),
+        "summary": read_worksheet(SPREADSHEET_NAME, f"summary_{month_key}"),
+        "weekly": read_worksheet(SPREADSHEET_NAME, f"weekly_{month_key}"),
+        "daily": read_worksheet(SPREADSHEET_NAME, f"daily_ratings_{month_key}"),
+        "tamasha_aspects": read_worksheet(SPREADSHEET_NAME, f"tamasha_aspects_{month_key}"),
+        "tamasha_tagged": read_worksheet(SPREADSHEET_NAME, f"tamasha_tagged_reviews_{month_key}"),
+        "tamasha_insights": read_worksheet(SPREADSHEET_NAME, f"tamasha_insights_{month_key}"),
     }
     return bundle
 
@@ -1143,8 +1181,8 @@ def build_review_window_distribution(tagged_df: pd.DataFrame, month_key: str) ->
 # LOAD DATA
 # =========================================================
 try:
-    latest_month = get_latest_month(SPREADSHEET_NAME, CREDS_FILE)
-    all_months = available_month_keys(SPREADSHEET_NAME, CREDS_FILE)
+    latest_month = get_latest_month(SPREADSHEET_NAME)
+    all_months = available_month_keys(SPREADSHEET_NAME)
 except Exception as e:
     st.error(f"Could not connect to Google Sheets: {e}")
     st.stop()
