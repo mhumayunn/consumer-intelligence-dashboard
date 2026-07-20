@@ -1,0 +1,15 @@
+# Python cache
+__pycache__/
+
+# Virtual environment
+venv/
+.venv/
+
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Google service account credentials
+sentiment-automation-caadd9710134.json
