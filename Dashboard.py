@@ -10,12 +10,19 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 from google.oauth2.service_account import Credentials
 from PIL import Image
 import streamlit.components.v1 as components
 import calendar
 from pathlib import Path
 
+st.set_page_config(
+    page_title="Play Store Product Intelligence Dashboard",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 # =========================================================
 # CONFIG
@@ -45,15 +52,15 @@ RISK_BUCKETS = {
 }
 
 PRIMARY_COLORS = {
-    "tamasha": "#28282A",
-    "tapmad": "#4B4951",
-    "myco": "#ADABAE",
+    "tamasha": "#087F8C",
+    "tapmad": "#5975C4",
+    "myco": "#D69A36",
 }
 
 SENTIMENT_COLORS = {
-    "Positive": "#6F7F6A",
-    "Neutral": "#ADABAE",
-    "Negative": "#8A3A3A",
+    "Positive": "#138A78",
+    "Neutral": "#B9C5D3",
+    "Negative": "#CC5965",
 }
 
 PRIORITY_COLORS = {
@@ -62,21 +69,75 @@ PRIORITY_COLORS = {
     "P3": "#ADABAE",
 }
 
+# =========================================================
+# PASSCODE PROTECTION
+# =========================================================
+
+def submit_passcode():
+    try:
+        correct_passcode = st.secrets.get("APP_PASSCODE", "tamasha123")
+    except StreamlitSecretNotFoundError:
+        correct_passcode = "tamasha123"
+    st.session_state.authenticated = (
+        st.session_state.get("passcode_input", "") == correct_passcode
+    )
+    st.session_state.login_error = not st.session_state.authenticated
+    if st.session_state.authenticated:
+        st.session_state.pop("passcode_input", None)
+
+
+# This slot is replaced in place, clearing the login before data loading begins.
+entry_screen = st.empty()
+if not st.session_state.get("authenticated", False):
+    with entry_screen.container():
+        st.markdown("""<style>
+            .stApp { background: #F3F6FA; color: #243449; }
+            [data-testid="stHeader"] { background: #F3F6FA; }
+            [data-testid="stSidebar"] { display: none; }
+            [data-testid="stForm"] { background: white; padding: 28px;
+                border: 1px solid #DFE7EF; border-radius: 18px; }
+            [data-testid="stForm"] h2, [data-testid="stForm"] p,
+            [data-testid="stForm"] label { color: #243449 !important; }
+            [data-testid="stForm"] input { color: #FFFFFF !important; }
+            [data-testid="stForm"] [data-baseweb="input"] { background: #F3F6FA; }
+            [data-testid="stFormSubmitButton"] button {
+                background: #087F8C; color: white; border: 0; }
+            [data-testid="stFormSubmitButton"] button p { color: white !important; }
+        </style>""", unsafe_allow_html=True)
+        _, center, _ = st.columns([1, 1.2, 1])
+        with center:
+            st.markdown("<div style='height:12vh'></div>", unsafe_allow_html=True)
+            with st.form("login_form"):
+                st.markdown("## Tamasha Product Intelligence")
+                st.write("Enter your access passcode to continue.")
+                st.text_input("Passcode", type="password", key="passcode_input")
+                st.form_submit_button("Login", on_click=submit_passcode,
+                                      use_container_width=True)
+                if st.session_state.get("login_error", False):
+                    st.error("Incorrect passcode.")
+    st.stop()
+
+entry_screen.markdown("""<style>
+    .stApp { background: #F3F6FA !important; }
+    .stApp::after { content: ''; position: fixed; inset: 0;
+        background: #F3F6FA; z-index: 2147483647; }
+    [data-testid="stAppViewContainer"], [data-testid="stHeader"],
+    [data-testid="stToolbar"] { visibility: hidden !important; }
+</style>""", unsafe_allow_html=True)
+
 
 # =========================================================
 # PAGE SETUP
 # =========================================================
-st.set_page_config(
-    page_title="Play Store Product Intelligence Dashboard",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
 def inject_css() -> None:
     st.markdown(
         """
         <style>
+
+        /* Hide Streamlit page outline/navigation */
+        [data-testid="stSidebarNav"] {
+            display: none;
+        }
 
         /* =========================
            GLOBAL PALETTE
@@ -415,13 +476,6 @@ def inject_css() -> None:
             margin-bottom: 8px;
         }
 
-        div[data-testid="stVerticalBlockBorderWrapper"] {
-            background: rgba(255,255,255,0.14);
-            border: 1px solid rgba(255,255,255,0.22);
-            border-radius: 22px;
-            padding: 10px;
-        }
-
         /* =========================
            TABLES
         ========================= */
@@ -620,6 +674,79 @@ def inject_css() -> None:
             border-color: rgba(40, 40, 42, 0.12);
         }
 
+
+
+        /* Explicit light surfaces prevent inherited dark-theme widget colors. */
+        [data-testid="stHeader"] { background: #F3F6FA; }
+        section[data-testid="stSidebar"] { background: #F8FAFC !important; color: #243449 !important; }
+        section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+        section[data-testid="stSidebar"] p,
+        section[data-testid="stSidebar"] h2,
+        section[data-testid="stSidebar"] label,
+        section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
+            color: #243449 !important;
+        }
+        section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p { color: #64748B !important; }
+        section[data-testid="stSidebar"] [data-baseweb="select"] > div {
+            background: #FFFFFF !important; color: #243449 !important;
+            border-color: #CBD5E1 !important; border-radius: 10px;
+        }
+        section[data-testid="stSidebar"] [data-baseweb="select"] span,
+        section[data-testid="stSidebar"] [data-baseweb="select"] div,
+        section[data-testid="stSidebar"] svg { color: #243449 !important; }
+        section[data-testid="stSidebar"] button {
+            background: #E5F2F3 !important; color: #146573 !important;
+            border: 1px solid #B8DCDD !important;
+        }
+        [data-baseweb="popover"] [role="listbox"],
+        [data-baseweb="popover"] [role="option"] {
+            background: #FFFFFF !important; color: #243449 !important;
+        }
+        [data-baseweb="popover"] [role="option"]:hover,
+        [data-baseweb="popover"] [aria-selected="true"] { background: #E5F2F3 !important; }
+
+        /* Unified dashboard surfaces and typography */
+        .stApp { background: #F3F6FA; color: #243449; }
+        .stMainBlockContainer, .main .block-container {
+            max-width: 1480px; padding-top: 2rem; padding-bottom: 3rem;
+        }
+        .hero-card {
+            background: linear-gradient(115deg, #142E3D 0%, #145364 100%);
+            border: 0; border-radius: 22px; padding: 32px 36px;
+            box-shadow: 0 12px 32px rgba(20,46,61,.12);
+        }
+        .hero-title { font-size: clamp(1.6rem, 2.7vw, 2.4rem); letter-spacing: -.04em; color: #FFFFFF; }
+        .hero-subtitle { max-width: 850px; line-height: 1.65; color: #CEE3E8; }
+        .eyebrow { color: #86CED1; font-size: .7rem; letter-spacing: .16em; }
+        .kpi-card, .insight-card, .glass-card, .data-card {
+            background: #FFFFFF; border: 1px solid #E3EAF1;
+            box-shadow: 0 3px 12px rgba(23,43,64,.035); border-radius: 16px;
+            backdrop-filter: none;
+        }
+        .kpi-card { padding: 22px; min-height: 166px; }
+        .kpi-card::before { background: #087F8C; top: 0; left: 22px; width: 30px; height: 3px; }
+        .kpi-card:hover, .insight-card:hover, .glass-card:hover {
+            transform: none; box-shadow: 0 5px 18px rgba(23,43,64,.07);
+        }
+        .kpi-label { color: #64748B; font-size: .78rem; font-weight: 600; }
+        .kpi-value { font-size: clamp(1.8rem, 2.8vw, 2.8rem); letter-spacing: -.045em; font-weight: 750; }
+        .kpi-value-small { font-size: 1.1rem; line-height: 1.4; }
+        .insight-title { color: #087F8C; letter-spacing: .08em; }
+        .insight-body { color: #334155; font-weight: 500; line-height: 1.65; }
+        .insight-sub, .section-subtitle { color: #718096; font-size: .86rem; line-height: 1.6; }
+        .section-title { color: #183547; font-size: 1.1rem; letter-spacing: -.02em; }
+        .section-title::after { display: none; }
+        .section-spacer { height: 28px; }
+        .pill { background: #FFFFFF; border: 1px solid #DFE7EF; color: #526579; font-size: .74rem; margin-bottom: 16px; }
+        [data-testid="stSidebar"] { background: #FFFFFF; border-right: 1px solid #E3EAF1; }
+        .stTabs [data-baseweb="tab-list"] { background: #E8EEF4; border-radius: 12px; padding: 5px; margin: 10px 0 24px; }
+        .stTabs [aria-selected="true"] { background: #FFFFFF !important; color: #087F8C !important; box-shadow: 0 2px 6px #142E3D0D; }
+        .stTabs [aria-selected="true"] p { color: #087F8C !important; }
+        [data-testid="stPlotlyChart"] { background: #FFFFFF; border-radius: 14px; padding: 8px; }
+        @media (max-width: 768px) {
+            .hero-card { padding: 24px; }
+            .kpi-card { min-height: 140px; }
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -734,6 +861,31 @@ def normalize_app_name(x: str) -> str:
         return ""
     key = str(x).strip().lower()
     return APP_DISPLAY.get(key, str(x).title())
+
+
+def get_app_metric(
+    df: pd.DataFrame,
+    app_name: str,
+    metric: str,
+) -> Optional[float]:
+    """Safely return a numeric metric for one app, or None if unavailable."""
+    if df is None or df.empty or "app" not in df.columns or metric not in df.columns:
+        return None
+
+    app_key = str(app_name).strip().lower()
+    rows = df[
+        df["app"].astype(str).str.strip().str.lower() == app_key
+    ]
+
+    if rows.empty:
+        return None
+
+    value = pd.to_numeric(
+        pd.Series([rows.iloc[0][metric]]),
+        errors="coerce",
+    ).iloc[0]
+
+    return None if pd.isna(value) else float(value)
 
 
 def to_numeric_safe(df: pd.DataFrame, cols):
@@ -985,40 +1137,42 @@ def build_action_board(priority_df: pd.DataFrame) -> pd.DataFrame:
 
 def fig_style(fig):
     fig.update_layout(
+        template="plotly_white",
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(246,243,238,0.65)",
-        font=dict(color="#28282A", family="Inter, Segoe UI, Arial"),
-        margin=dict(l=18, r=18, t=50, b=18),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="left",
-            x=0,
-            font=dict(color="#28282A")
-        ),
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#243449", family="Inter, Segoe UI, Arial", size=12),
+        margin=dict(l=16, r=24, t=52, b=40),
+        bargap=0.35,
+        hoverlabel=dict(bgcolor="#152D3B", bordercolor="#152D3B",
+                        font=dict(color="white", size=13)),
+        legend=dict(orientation="h", yanchor="bottom", y=1.04,
+                    xanchor="left", x=0, title_text="", font=dict(size=12)),
     )
-    fig.update_xaxes(
-        showgrid=False,
-        zeroline=False,
-        color="#28282A",
-        tickfont=dict(color="#28282A"),
-        title_font=dict(color="#28282A"),
-    )
-    fig.update_yaxes(
-        gridcolor="rgba(40,40,42,0.12)",
-        zeroline=False,
-        color="#28282A",
-        tickfont=dict(color="#28282A"),
-        title_font=dict(color="#28282A"),
-    )
+    fig.update_xaxes(showgrid=False, zeroline=False, showline=False,
+                     automargin=True, color="#64748B", title_font=dict(size=12))
+    fig.update_yaxes(gridcolor="#E8EEF3", gridwidth=1, zeroline=False,
+                     showline=False, automargin=True, color="#64748B",
+                     title_font=dict(size=12))
+    for trace in fig.data:
+        if trace.type == "bar":
+            trace.update(marker_line_width=0, cliponaxis=False)
+            if trace.orientation == "h":
+                fig.update_yaxes(showgrid=False)
+                fig.update_xaxes(showgrid=True, gridcolor="#E8EEF3")
+        elif trace.type == "pie":
+            trace.update(textinfo="percent", textposition="inside", sort=False,
+                         marker=dict(line=dict(color="#FFFFFF", width=4)),
+                         hovertemplate="<b>%{label}</b><br>%{value:.1f}% of reviews<extra></extra>")
     return fig
 
 
 def render_plotly(fig, key=None, apply_global_style=True):
-    if apply_global_style:
-        fig = fig_style(fig)
-    st.plotly_chart(fig, use_container_width=True, key=key)
+    # Every chart shares the same visual language, including custom layouts.
+    fig = fig_style(fig)
+    st.plotly_chart(fig, use_container_width=True, key=key, theme=None,
+                   config={"displaylogo": False, "scrollZoom": False,
+                           "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+                           "toImageButtonOptions": {"format": "png", "scale": 2}})
 
 
 def render_snapshot_table(df: pd.DataFrame) -> None:
@@ -1185,6 +1339,7 @@ try:
     all_months = available_month_keys(SPREADSHEET_NAME)
 except Exception as e:
     st.error(f"Could not connect to Google Sheets: {e}")
+    entry_screen.empty()
     st.stop()
 
 
@@ -1192,121 +1347,384 @@ except Exception as e:
 # SIDEBAR
 # =========================================================
 st.sidebar.markdown("## Product Intelligence")
-st.sidebar.caption("Interactive sentiment and product risk dashboard")
+st.sidebar.caption(
+    "Interactive sentiment and product risk dashboard"
+)
 
 selected_month = st.sidebar.selectbox(
     "Reporting month",
     options=all_months,
-    index=all_months.index(latest_month) if latest_month in all_months else 0,
+    index=(
+        all_months.index(latest_month)
+        if latest_month in all_months
+        else 0
+    ),
     format_func=parse_month_label,
 )
 
-compare_prev = st.sidebar.toggle("Compare with previous month", value=True)
-show_only_actionable = st.sidebar.toggle("Focus on actionable aspects", value=True)
 
+# =========================================================
+# COMPARISON MODE STATE
+# =========================================================
+if "compare_previous_month" not in st.session_state:
+    st.session_state.compare_previous_month = True
+
+if "compare_another_month" not in st.session_state:
+    st.session_state.compare_another_month = False
+
+
+def activate_previous_month_comparison():
+    if st.session_state.compare_previous_month:
+        st.session_state.compare_another_month = False
+
+
+def activate_custom_month_comparison():
+    if st.session_state.compare_another_month:
+        st.session_state.compare_previous_month = False
+
+
+compare_prev = st.sidebar.toggle(
+    "Compare with previous month",
+    key="compare_previous_month",
+    on_change=activate_previous_month_comparison,
+)
+
+compare_custom = st.sidebar.toggle(
+    "Compare with another month",
+    key="compare_another_month",
+    on_change=activate_custom_month_comparison,
+)
+
+
+# =========================================================
+# DETERMINE COMPARISON MONTH
+# =========================================================
+comparison_month = None
+
+if compare_custom:
+    selected_index = all_months.index(selected_month)
+
+    # Assumes all_months is sorted newest to oldest.
+    # Months after the selected month are older.
+    older_months = all_months[selected_index + 1:]
+
+    if older_months:
+        comparison_month = st.sidebar.selectbox(
+            "Comparison month",
+            options=older_months,
+            format_func=parse_month_label,
+            key="custom_comparison_month",
+        )
+    else:
+        st.sidebar.info(
+            "There are no earlier months available for comparison."
+        )
+
+elif compare_prev:
+    comparison_month = previous_month_key(
+        selected_month,
+        all_months,
+    )
+
+
+# =========================================================
+# SIDEBAR STATUS
+# =========================================================
 st.sidebar.markdown("---")
+
 st.sidebar.markdown(
-    f"<span class='pill'>Latest month: {parse_month_label(latest_month)}</span>",
+    (
+        "<span class='pill'>"
+        f"Latest month: {parse_month_label(latest_month)}"
+        "</span>"
+    ),
     unsafe_allow_html=True,
 )
 
-prev_month = previous_month_key(selected_month, all_months)
+if comparison_month:
+    st.sidebar.caption(
+        f"Comparing {parse_month_label(selected_month)} "
+        f"with {parse_month_label(comparison_month)}"
+    )
 
+
+# =========================================================
+# LOAD CURRENT MONTH DATA
+# =========================================================
 try:
-    current_bundle = preprocess_bundle(load_month_bundle(selected_month))
+    current_bundle = preprocess_bundle(
+        load_month_bundle(selected_month)
+    )
 except Exception as e:
-    st.error(f"Could not load selected month data: {e}")
+    st.error(
+        f"Could not load selected month data: {e}"
+    )
+    entry_screen.empty()
     st.stop()
 
+
+# =========================================================
+# LOAD COMPARISON MONTH DATA
+# =========================================================
 prev_bundle = None
-if compare_prev and prev_month:
+
+if comparison_month:
     try:
-        prev_bundle = preprocess_bundle(load_month_bundle(prev_month))
-    except Exception:
+        prev_bundle = preprocess_bundle(
+            load_month_bundle(comparison_month)
+        )
+    except Exception as e:
+        st.warning(
+            f"Could not load comparison month "
+            f"{parse_month_label(comparison_month)}: {e}"
+        )
         prev_bundle = None
 
-summary_df = compute_category_metrics(current_bundle["summary"])
-weekly_df = current_bundle["weekly"]
-daily_df = current_bundle["daily"]
-aspects_df = current_bundle["tamasha_aspects"].copy()
-tagged_df = current_bundle["tamasha_tagged"].copy()
-insights_df = current_bundle["tamasha_insights"].copy()
 
-if show_only_actionable and not aspects_df.empty:
-    aspects_df = aspects_df[aspects_df["Aspect"] != "Overall Experience"].copy()
+# =========================================================
+# CURRENT MONTH DATAFRAMES
+# =========================================================
+summary_df = compute_category_metrics(
+    current_bundle["summary"]
+)
 
-priority_df = compute_priority_matrix(aspects_df)
-risk_scores = build_risk_scores(aspects_df)
-action_board = build_action_board(priority_df)
+weekly_df = current_bundle["weekly"].copy()
+daily_df = current_bundle["daily"].copy()
 
-prev_summary_df = prev_bundle["summary"] if prev_bundle else pd.DataFrame()
-prev_summary_df = compute_category_metrics(prev_summary_df) if not prev_summary_df.empty else prev_summary_df
-prev_aspects_df = prev_bundle["tamasha_aspects"] if prev_bundle else pd.DataFrame()
+aspects_df = current_bundle[
+    "tamasha_aspects"
+].copy()
+
+tagged_df = current_bundle[
+    "tamasha_tagged"
+].copy()
+
+insights_df = current_bundle[
+    "tamasha_insights"
+].copy()
+
+
+# Always remove the generic non-actionable aspect
+if (
+    not aspects_df.empty
+    and "Aspect" in aspects_df.columns
+):
+    aspects_df = aspects_df[
+        aspects_df["Aspect"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        != "overall experience"
+    ].copy()
+
+
+# =========================================================
+# COMPARISON MONTH DATAFRAMES
+# =========================================================
 if prev_bundle:
-    prev_aspects_df = prev_bundle["tamasha_aspects"].copy()
+    prev_summary_df = prev_bundle[
+        "summary"
+    ].copy()
+
+    prev_summary_df = compute_category_metrics(
+        prev_summary_df
+    )
+
+    prev_aspects_df = prev_bundle[
+        "tamasha_aspects"
+    ].copy()
+
     prev_aspects_df = to_numeric_safe(
         prev_aspects_df,
-        ["mentions", "Positive", "Neutral", "Negative", "Unknown", "pos_%", "neu_%", "neg_%"]
+        [
+            "mentions",
+            "Positive",
+            "Neutral",
+            "Negative",
+            "Unknown",
+            "pos_%",
+            "neu_%",
+            "neg_%",
+        ],
     )
+
+    # Apply the same actionable-aspect filter
+    # to the comparison month
+    if (
+        not prev_aspects_df.empty
+        and "Aspect" in prev_aspects_df.columns
+    ):
+        prev_aspects_df = prev_aspects_df[
+            prev_aspects_df["Aspect"]
+            .astype(str)
+            .str.strip()
+            .str.lower()
+            != "overall experience"
+        ].copy()
+
 else:
+    prev_summary_df = pd.DataFrame()
     prev_aspects_df = pd.DataFrame()
 
 
 # =========================================================
 # DERIVED METRICS
 # =========================================================
-def get_app_metric(df: pd.DataFrame, app: str, metric: str) -> Optional[float]:
-    if df.empty:
-        return None
-    sub = df[df["app"] == app]
-    if sub.empty or metric not in sub.columns:
-        return None
-    return sub.iloc[0][metric]
+priority_df = compute_priority_matrix(
+    aspects_df
+)
+
+risk_scores = build_risk_scores(
+    aspects_df
+)
+
+action_board = build_action_board(
+    priority_df
+)
 
 
+# =========================================================
+# GLOBAL DASHBOARD METRICS
+# =========================================================
+# Current Tamasha KPIs
 tamasha_reviews = get_app_metric(summary_df, "tamasha", "total_reviews")
 tamasha_rating = get_app_metric(summary_df, "tamasha", "avg_rating")
 tamasha_pos = get_app_metric(summary_df, "tamasha", "positive_pct")
 tamasha_neg = get_app_metric(summary_df, "tamasha", "negative_pct")
 
-t_prev_reviews = get_app_metric(prev_summary_df, "tamasha", "total_reviews") if not prev_summary_df.empty else None
-t_prev_rating = get_app_metric(prev_summary_df, "tamasha", "avg_rating") if not prev_summary_df.empty else None
-t_prev_pos = get_app_metric(prev_summary_df, "tamasha", "positive_pct") if not prev_summary_df.empty else None
-t_prev_neg = get_app_metric(prev_summary_df, "tamasha", "negative_pct") if not prev_summary_df.empty else None
+# Comparison Tamasha KPIs. These remain None when comparison is disabled
+# or the comparison month could not be loaded, so KPI deltas render as em dashes.
+t_prev_reviews = get_app_metric(prev_summary_df, "tamasha", "total_reviews")
+t_prev_rating = get_app_metric(prev_summary_df, "tamasha", "avg_rating")
+t_prev_pos = get_app_metric(prev_summary_df, "tamasha", "positive_pct")
+t_prev_neg = get_app_metric(prev_summary_df, "tamasha", "negative_pct")
 
-best_strength = None
-if not aspects_df.empty and "Positive" in aspects_df.columns:
-    best_strength = aspects_df.sort_values(["Positive", "mentions"], ascending=False).iloc[0]["Aspect"]
 
-highest_risk = None
-if not priority_df.empty:
-    highest_risk = priority_df.iloc[0]["Aspect"]
+# Most discussed actionable aspect
+if not aspects_df.empty and {"Aspect", "mentions"}.issubset(aspects_df.columns):
+    most_discussed = (
+        aspects_df.sort_values("mentions", ascending=False).iloc[0]["Aspect"]
+    )
+else:
+    most_discussed = None
 
-most_discussed = None
-if not aspects_df.empty:
-    most_discussed = aspects_df.sort_values("mentions", ascending=False).iloc[0]["Aspect"]
 
-most_improved = None
-most_deteriorated = None
-mom_issue_table = pd.DataFrame()
-if prev_bundle is not None and not prev_aspects_df.empty and not current_bundle["tamasha_aspects"].empty:
-    curr_base = current_bundle["tamasha_aspects"][["Aspect", "mentions", "Negative"]].copy()
-    prev_base = prev_aspects_df[["Aspect", "mentions", "Negative"]].copy()
-    mom_issue_table = curr_base.merge(prev_base, on="Aspect", how="outer", suffixes=("_curr", "_prev")).fillna(0)
-    mom_issue_table["neg_change"] = mom_issue_table["Negative_curr"] - mom_issue_table["Negative_prev"]
-    mom_issue_table["mention_change"] = mom_issue_table["mentions_curr"] - mom_issue_table["mentions_prev"]
-    if not mom_issue_table.empty:
-        most_deteriorated = mom_issue_table.sort_values(["neg_change", "mention_change"], ascending=False).iloc[0]["Aspect"]
-        most_improved = mom_issue_table.sort_values(["neg_change", "mention_change"], ascending=True).iloc[0]["Aspect"]
+# Strongest positive actionable aspect
+if not aspects_df.empty and "Aspect" in aspects_df.columns:
+    strength_df = aspects_df.copy()
 
-leader_rating = summary_df["avg_rating"].max() if not summary_df.empty else None
-rating_gap_to_leader = (tamasha_rating - leader_rating) if tamasha_rating is not None and leader_rating is not None else None
+    if "pos_%" in strength_df.columns:
+        strength_df["strength_score"] = pd.to_numeric(
+            strength_df["pos_%"], errors="coerce"
+        )
+    elif {"Positive", "mentions"}.issubset(strength_df.columns):
+        strength_df["strength_score"] = np.where(
+            pd.to_numeric(strength_df["mentions"], errors="coerce").fillna(0) > 0,
+            pd.to_numeric(strength_df["Positive"], errors="coerce").fillna(0)
+            / pd.to_numeric(strength_df["mentions"], errors="coerce").replace(0, np.nan)
+            * 100,
+            np.nan,
+        )
+    else:
+        strength_df["strength_score"] = np.nan
 
+    valid_strengths = strength_df.dropna(subset=["strength_score"])
+    best_strength = (
+        valid_strengths.sort_values("strength_score", ascending=False).iloc[0]["Aspect"]
+        if not valid_strengths.empty
+        else None
+    )
+else:
+    best_strength = None
+
+
+# Highest current risk / complaint theme
+if not priority_df.empty and "Aspect" in priority_df.columns:
+    highest_risk = str(priority_df.iloc[0]["Aspect"])
+elif not aspects_df.empty and {"Aspect", "Negative"}.issubset(aspects_df.columns):
+    highest_risk = str(
+        aspects_df.sort_values("Negative", ascending=False).iloc[0]["Aspect"]
+    )
+else:
+    highest_risk = None
+
+
+# Trust risk score: negative rate for payment / auto-renew complaints (0-100).
 trust_risk_score = 0.0
-if not risk_scores.empty:
-    trust_row = risk_scores[risk_scores["risk_bucket"] == "Trust / Revenue Risk"]
-    if not trust_row.empty:
-        trust_risk_score = float(trust_row.iloc[0]["weighted_risk"])
+if not aspects_df.empty and "Aspect" in aspects_df.columns:
+    trust_rows = aspects_df[
+        aspects_df["Aspect"].astype(str).str.strip().str.lower()
+        == "payments & auto-renew/charges"
+    ]
+
+    if not trust_rows.empty:
+        trust_row = trust_rows.iloc[0]
+        mentions = pd.to_numeric(
+            pd.Series([trust_row.get("mentions", np.nan)]), errors="coerce"
+        ).iloc[0]
+        negatives = pd.to_numeric(
+            pd.Series([trust_row.get("Negative", np.nan)]), errors="coerce"
+        ).iloc[0]
+
+        if pd.notna(mentions) and mentions > 0 and pd.notna(negatives):
+            trust_risk_score = float(negatives / mentions * 100)
+
+
+# Comparison table for issue movement. It compares whichever month is selected
+# in the sidebar, not only the immediately previous calendar month.
+mom_issue_table = pd.DataFrame()
+most_deteriorated = None
+
+if (
+    comparison_month
+    and not aspects_df.empty
+    and not prev_aspects_df.empty
+    and "Aspect" in aspects_df.columns
+    and "Aspect" in prev_aspects_df.columns
+):
+    current_issue = aspects_df.copy()
+    previous_issue = prev_aspects_df.copy()
+
+    current_issue["Negative"] = pd.to_numeric(
+        current_issue.get("Negative"), errors="coerce"
+    ).fillna(0)
+    previous_issue["Negative"] = pd.to_numeric(
+        previous_issue.get("Negative"), errors="coerce"
+    ).fillna(0)
+
+    current_issue = (
+        current_issue.groupby("Aspect", as_index=False)["Negative"]
+        .sum()
+        .rename(columns={"Negative": "current_negative"})
+    )
+    previous_issue = (
+        previous_issue.groupby("Aspect", as_index=False)["Negative"]
+        .sum()
+        .rename(columns={"Negative": "comparison_negative"})
+    )
+
+    mom_issue_table = current_issue.merge(
+        previous_issue,
+        on="Aspect",
+        how="outer",
+    ).fillna(0)
+
+    mom_issue_table["neg_change"] = (
+        mom_issue_table["current_negative"]
+        - mom_issue_table["comparison_negative"]
+    )
+
+    actionable_movement = mom_issue_table[
+        mom_issue_table["Aspect"].astype(str).str.strip().str.lower()
+        != "overall experience"
+    ]
+
+    if not actionable_movement.empty:
+        most_deteriorated = str(
+            actionable_movement.sort_values(
+                "neg_change", ascending=False
+            ).iloc[0]["Aspect"]
+        )
 
 
 # =========================================================
@@ -1327,7 +1745,7 @@ with hero_col:
         <div class='hero-card'>
             <div class='eyebrow'>Play Store Product Intelligence Dashboard</div>
             <div class='hero-title'>Tamasha Sentiment & Consumer Intelligence</div>
-            <p class='hero-subtitle'>A decision-grade product dashboard built from Google Play reviews, competitor benchmarking, risk diagnostics, and aspect-level insight tracking for <b>{parse_month_label(selected_month)}</b>.</p>
+            <p class='hero-subtitle'>Review performance, competitive benchmarks, and the customer signals that matter. Reporting for <b>{parse_month_label(selected_month)}</b>.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1335,7 +1753,6 @@ with hero_col:
 
 st.markdown(
     f"<span class='pill'>Reporting month: {parse_month_label(selected_month)}</span>"
-    f"<span class='pill'>Default month source: meta.latest_month</span>"
     f"<span class='pill'>Apps tracked: {', '.join(APP_DISPLAY[a] for a in APP_DISPLAY if a in summary_df['app'].tolist())}</span>",
     unsafe_allow_html=True,
 )
@@ -1494,11 +1911,7 @@ with tab1:
 
     fig = go.Figure()
 
-    line_colors = {
-        "tamasha": "#6F8F68",  # muted green
-        "tapmad": "#D9903D",   # muted orange
-        "myco": "#3F7FBF",     # muted blue
-    }
+    line_colors = PRIMARY_COLORS
 
     for app_name, grp in daily_df.sort_values("date").groupby("source_display"):
         app_key = str(app_name).strip().lower()
@@ -1516,7 +1929,7 @@ with tab1:
                     color=line_colors.get(app_key, "#ADABAE"),
                 ),
                 marker=dict(
-                    size=9 if is_tamasha else 7,
+                    size=6 if is_tamasha else 4,
                     color=line_colors.get(app_key, "#ADABAE"),
                     line=dict(
                         width=2,
@@ -1533,7 +1946,7 @@ with tab1:
 
     fig.update_layout(
         height=455,
-        hovermode="closest",
+        hovermode="x unified",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(237,226,204,0.00)",
         xaxis_title="Date",
@@ -1571,7 +1984,7 @@ with tab1:
         showline=False,
         zeroline=False,
         tickformat="%d",
-        dtick="D1",
+        nticks=10,
         tickfont=dict(
             size=12,
             color="#4B4951",
@@ -1641,9 +2054,9 @@ with tab1:
                         marker=dict(
                             color=review_windows["reviews"],
                             colorscale=[
-                                [0.0, "#A7A4A0"],
-                                [0.5, "#6B6870"],
-                                [1.0, "#3F3D43"],
+                                [0.0, "#A9DCD9"],
+                                [0.5, "#3CA6AC"],
+                                [1.0, "#087F8C"],
                             ],
                         ),
                         hovertemplate="<b>%{x}</b><br>Reviews: %{y}<extra></extra>",
@@ -1703,7 +2116,7 @@ with tab1:
                     margin=dict(l=0, r=0, t=0, b=0),
                     annotations=[
                         dict(
-                            text="Sentiment",
+                            text=f"<b>{row.get('positive_pct', 0):.0f}%</b><br>positive",
                             x=0.5,
                             y=0.5,
                             showarrow=False,
@@ -1872,6 +2285,8 @@ with tab4:
                     y="Aspect",
                     orientation="h",
                     color="negative_rate",
+                    range_color=[0, 100],
+                    text="Negative",
                     color_continuous_scale=[
                         [0.0, "#F3D6D2"],
                         [0.45, "#C96F65"],
@@ -1927,12 +2342,17 @@ with tab4:
         with risk_right:
             with st.container(border=True):
                 section_header(
-                    "Month-over-month issue movement",
-                    "Compares Tamasha complaint themes in tagged reviews against the previous month. Positive values mean the issue worsened; negative values mean it improved.",
+                    "Issue movement between selected months",
+                    (
+                        f"Compares {parse_month_label(selected_month)} with {parse_month_label(comparison_month)}. "
+                        "Positive values mean the issue worsened; negative values mean it improved."
+                        if comparison_month
+                        else "Enable a comparison mode to view issue movement."
+                    ),
                 )
 
                 if mom_issue_table.empty:
-                    st.info("No month-over-month issue movement available.")
+                    st.info("No comparison issue movement available.")
                 else:
                     movement = mom_issue_table[
                         mom_issue_table["Aspect"].astype(str).str.lower() != "overall experience"
@@ -1943,6 +2363,7 @@ with tab4:
                         x="Aspect",
                         y="neg_change",
                         color="neg_change",
+                        color_continuous_midpoint=0,
                         color_continuous_scale=[
                             [0.0, "#6F8F68"],   # muted green = improved
                             [0.50, "#D8CFAE"],  # muted cream/yellow = little change
@@ -2007,52 +2428,6 @@ with tab4:
                         apply_global_style=False,
                     )
         st.markdown("<div class='section-spacer'></div>", unsafe_allow_html=True)
-
-    with st.container(border=True):
-        section_header("Product action board", "")
-
-        if action_board.empty:
-            st.info("No action board data available.")
-        else:
-            board_view = action_board[
-                [
-                    "issue",
-                    "priority",
-                    "mentions",
-                    "negative_mentions",
-                    "negative_rate_pct",
-                    "risk_type",
-                    "owner",
-                    "business_impact",
-                ]
-            ].copy()
-
-            board_view.columns = [
-                "Issue",
-                "Priority",
-                "Mentions",
-                "Negative Mentions",
-                "Negative Rate %",
-                "Risk Type",
-                "Owner",
-                "Business Impact",
-            ]
-
-            board_view = board_view[
-                board_view["Issue"].astype(str).str.lower() != "overall experience"
-            ]
-
-            st.markdown("<div class='action-board-wrapper'>", unsafe_allow_html=True)
-
-            st.dataframe(
-                board_view,
-                use_container_width=True,
-                hide_index=True,
-            )
-
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("<div class='section-spacer'></div>", unsafe_allow_html=True)
 
     section_header(
         "Tamasha intelligence summary",
@@ -2365,3 +2740,7 @@ with tab4:
             )
 
     st.caption("Built for executive product reviews, competitor monitoring, and monthly sentiment diagnostics.")
+
+
+# Reveal the dashboard only after all sections have been generated.
+entry_screen.empty()
